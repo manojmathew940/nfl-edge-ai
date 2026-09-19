@@ -7,23 +7,50 @@ query execution, and response serialization are deterministic application code.
 
 ```mermaid
 flowchart TD
-    User[User asks an NFL question] --> API[FastAPI POST /ask]
-    API --> Schema[Python loads approved schema metadata<br/>docs/nfl_plays_schema.yaml]
-    Schema --> Extractor[LLM call 1: data extractor<br/>decide whether data is needed and generate SQL]
+    Question([User question])
+    API[FastAPI POST /ask]
+    Schema[(nfl_plays_schema.yaml)]
+    SchemaLoader[Python: load and render schema]
+    Extractor[LLM 1: data extraction and SQL generation]
+    Validator[Python: parse and validate SQL]
+    Executor[Python: apply row limit and submit SQL]
+    Parquet[(NFL play Parquet files)]
+    DuckDB[DuckDB query engine]
+    Rows[Python: serialize columns and rows]
+    Context[Python: build answer context]
+    Answer[LLM 2: grounded answer generation]
+    Response[Python: build AskResponse]
+    Final([Final JSON response])
 
-    Extractor -->|Data needed| Validate[Python parses and validates SQL<br/>SELECT only, approved views only]
-    Extractor -->|No data needed| Answer
+    Question -->|Question and provider| API
+    API -->|Question| SchemaLoader
+    Schema -->|Column contract| SchemaLoader
+    SchemaLoader -->|Question and rendered schema guide| Extractor
 
-    Validate -->|Invalid SQL| Reject[Return a structured validation error]
-    Reject --> User
-    Validate -->|Valid SQL| Limit[Python applies the result row limit]
-    Limit --> DuckDB[DuckDB executes the query<br/>against the nfl_plays view]
-    Parquet[(Processed season Parquet files<br/>data/processed/nfl_plays_*.parquet)] --> DuckDB
-    DuckDB --> Rows[Python serializes columns and rows]
-    Rows --> Answer[LLM call 2: answer generator<br/>question + extraction decision + analytics rows]
+    Extractor -->|Generated SQL when data is needed| Validator
+    Validator -->|Approved SQL| Executor
 
-    Answer --> Response[FastAPI AskResponse<br/>answer + data request + analytics metadata]
-    Response --> User
+    Executor -->|Bounded SQL query| DuckDB
+    Parquet -->|nfl_plays view data| DuckDB
+    DuckDB -->|Columns and result rows| Rows
+
+    API -->|Original question| Context
+    Extractor -->|Extraction decision| Context
+    Rows -->|Serialized analytics rows| Context
+    Context -->|Question, decision, and optional rows| Answer
+    Answer -->|Answer text| Response
+    Validator -.->|Validation failure skips LLM 2| Response
+    Response --> Final
+
+    classDef python fill:#e8f1fb,stroke:#2563eb,color:#111827
+    classDef llm fill:#f3e8ff,stroke:#7e22ce,color:#111827
+    classDef data fill:#ecfdf5,stroke:#059669,color:#111827
+    classDef external fill:#ffffff,stroke:#374151,color:#111827
+
+    class API,SchemaLoader,Validator,Executor,Rows,Context,Response python
+    class Extractor,Answer llm
+    class Schema,Parquet,DuckDB data
+    class Question,Final external
 ```
 
 ## Component Responsibilities
@@ -34,8 +61,11 @@ flowchart TD
 | Schema metadata loader | Python | Converts `nfl_plays_schema.yaml` into an LLM-readable schema guide. |
 | Data extractor | LLM call 1 | Decides whether local data is useful and generates one SQL query when needed. |
 | SQL validator | Python | Allows a single read-only query against approved analytics views and blocks direct file access. |
-| Row limiter | Python | Wraps valid SQL with the configured maximum result count. |
-| DuckDB analytics layer | SQL engine | Creates `nfl_plays` over compatible season Parquet files and executes the query. |
+| SQL executor | Python | Applies the result limit and submits approved SQL to DuckDB. |
+| DuckDB query engine | SQL engine | Creates `nfl_plays` over compatible season Parquet files and runs the bounded query. |
+| Parquet files | Data storage | Store processed NFL play data by season. |
+| Result serializer | Python | Converts DuckDB columns and rows into the bounded analytics payload. |
+| Answer context builder | Python | Combines the question, extraction decision, and optional analytics rows. |
 | Answer generator | LLM call 2 | Synthesizes the question, extraction decision, and returned rows into a grounded answer. |
 
 ## Data Boundaries

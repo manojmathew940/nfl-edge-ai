@@ -45,8 +45,11 @@ and query execution between them:
 flowchart LR
     Question[Question] --> Extract[SQL extraction LLM]
     Extract --> Guardrails[Python SQL validation]
-    Guardrails --> Data[(DuckDB and Parquet)]
-    Data --> Answer[Answer LLM]
+    Guardrails --> Execute[Python SQL execution]
+    Execute -->|SQL| DuckDB[DuckDB]
+    Parquet[(NFL Parquet files)] --> DuckDB
+    DuckDB -->|Result rows| Serialize[Python result serialization]
+    Serialize --> Answer[Answer LLM]
     Answer --> Response[Grounded response]
 ```
 

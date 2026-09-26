@@ -187,7 +187,7 @@ These fields are added by this project's cleaning pipeline:
 
 ## Storage And Access
 
-- Raw: `data/raw/nfl_play_by_play_<season>_raw.csv.gz`
+- Raw: `data/raw/nfl_play_by_play_<season>_raw.parquet`
 - Processed: `data/processed/nfl_plays_<season>.parquet`
 - Approved DuckDB view: `nfl_plays`
 

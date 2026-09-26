@@ -8,8 +8,8 @@ from typing import Any
 from dotenv import load_dotenv
 from openai import OpenAIError
 
-from app.analytics.schema_metadata import render_view_schema_guide
-from app.analytics.sql_views import NFL_PLAYS_VIEW
+from app.analytics.schema_metadata import render_schema_guides
+from app.data_foundation.datasets import DATASETS
 from app.llm.answering import (
     LLMServiceError,
     build_llm_client,
@@ -46,12 +46,15 @@ _DATA_EXTRACTION_RESPONSE_FORMAT = {
     },
 }
 
+NFL_PLAYS_VIEW = DATASETS["plays"].view_name
+_APPROVED_VIEWS = ", ".join(f"`{spec.view_name}`" for spec in DATASETS.values())
+
 _EXTRACT_DATA_INSTRUCTIONS = f"""
 You are a data extraction assistant for an NFL analytics app.
 
 Your job is to decide whether local structured play data can help answer the
 user's question. If it can, write exactly one DuckDB SELECT query against the
-approved `{NFL_PLAYS_VIEW}` view. If local data is not useful or not available
+approved views: {_APPROVED_VIEWS}. If local data is not useful or not available
 for the question, do not write SQL.
 
 Do not answer the user's question.
@@ -63,7 +66,7 @@ Return only JSON with these fields:
 - data_not_needed_reason: string or null
 
 SQL rules:
-- Use only the `{NFL_PLAYS_VIEW}` view.
+- Use only these views: {_APPROVED_VIEWS}.
 - Return exactly one SELECT query.
 - Do not use INSERT, UPDATE, DELETE, DROP, CREATE, COPY, ATTACH, or file-reading
   functions.
@@ -210,7 +213,7 @@ def _normalize_bool(value: Any) -> bool:
 
 
 def _render_data_extraction_prompt(question: str) -> str:
-    schema_guide = render_view_schema_guide()
+    schema_guide = render_schema_guides(list(DATASETS))
     return (
         "Use the schema below to choose the exact view and column names for any "
         "SQL query.\n"

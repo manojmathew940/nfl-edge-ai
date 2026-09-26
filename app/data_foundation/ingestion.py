@@ -1,134 +1,115 @@
 import argparse
-import csv
-import gzip
-import io
-import json
 from datetime import datetime, timezone
 from pathlib import Path
-from tempfile import NamedTemporaryFile
+from typing import BinaryIO
 from urllib.request import urlopen
 
+import pyarrow as pa
+import pyarrow.parquet as pq
 
-RAW_DATA_DIR = Path("data/raw")
-MIN_SEASON = 1999
-MAX_COMPRESSED_BYTES = 200 * 1024 * 1024
-REQUIRED_COLUMNS = {
-    "game_id",
-    "play_id",
-    "home_team",
-    "away_team",
-    "posteam",
-    "defteam",
-    "season",
-    "week",
-}
-PBP_URL_TEMPLATE = (
-    "https://github.com/nflverse/nflverse-data/releases/download/pbp/"
-    "play_by_play_{season}.csv.gz"
+from app.data_foundation.datasets import (
+    DATASETS,
+    RAW_DATA_DIR,
+    DatasetSpec,
+    get_dataset,
+    validate_season,
 )
+from app.data_foundation.file_io import staged_output, write_metadata
 
 
-def validate_season(season: int) -> None:
-    current_year = datetime.now(timezone.utc).year
-    if season < MIN_SEASON or season > current_year:
+_DOWNLOAD_CHUNK_BYTES = 1024 * 1024
+
+
+def _validate_content_length(content_length: str | None, max_bytes: int) -> int | None:
+    if content_length is None:
+        return None
+
+    expected_bytes = int(content_length)
+    if expected_bytes > max_bytes:
         raise ValueError(
-            f"Season must be between {MIN_SEASON} and {current_year}; got {season}."
+            "Source file is larger than the configured limit: "
+            f"{expected_bytes} bytes."
         )
+    return expected_bytes
 
 
-def validate_required_columns(fieldnames: list[str] | None) -> None:
-    if fieldnames is None:
-        raise ValueError("Source file did not contain a CSV header row.")
-
-    missing_columns = sorted(REQUIRED_COLUMNS - set(fieldnames))
+def _validate_required_columns(spec: DatasetSpec, column_names: list[str]) -> None:
+    missing_columns = [
+        column for column in spec.source_columns if column not in column_names
+    ]
     if missing_columns:
         raise ValueError(
             "Source file is missing required columns: " + ", ".join(missing_columns)
         )
 
 
-def validate_content_length(content_length: str | None) -> None:
-    if content_length is None:
-        return
-
-    compressed_bytes = int(content_length)
-    if compressed_bytes > MAX_COMPRESSED_BYTES:
-        raise ValueError(
-            "Source file is larger than the configured limit: "
-            f"{compressed_bytes} bytes."
-        )
-
-
-def write_metadata(
-    metadata_path: Path,
+def _copy_limited(
+    source: BinaryIO,
+    destination: BinaryIO,
     *,
-    source_url: str,
-    season: int,
-    output_path: Path,
-    rows_written: int,
-    source_column_count: int,
-) -> None:
-    metadata = {
-        "source": "nflverse/nflverse-data GitHub release",
-        "source_url": source_url,
-        "downloaded_at": datetime.now(timezone.utc).isoformat(),
-        "season": season,
-        "scope": "all_nfl",
-        "output_path": str(output_path),
-        "rows_written": rows_written,
-        "source_column_count": source_column_count,
-        "required_columns": sorted(REQUIRED_COLUMNS),
-    }
+    max_bytes: int,
+    expected_bytes: int | None,
+) -> int:
+    """Copy a download while enforcing the size limit on the bytes received."""
+    bytes_written = 0
+    while chunk := source.read(_DOWNLOAD_CHUNK_BYTES):
+        bytes_written += len(chunk)
+        if bytes_written > max_bytes:
+            raise ValueError(
+                f"Source file is larger than the configured limit: over {max_bytes} bytes."
+            )
+        destination.write(chunk)
 
-    metadata_path.write_text(json.dumps(metadata, indent=2) + "\n")
+    if expected_bytes is not None and bytes_written != expected_bytes:
+        raise ValueError(
+            f"Incomplete download: expected {expected_bytes} bytes, "
+            f"received {bytes_written}."
+        )
+    return bytes_written
 
 
-def save_raw_nfl_play_by_play(
-    season: int, output_dir: Path = RAW_DATA_DIR
+def save_raw(
+    dataset_name: str, season: int, raw_dir: Path = RAW_DATA_DIR
 ) -> tuple[Path, int]:
-    """Download and save every raw play from one NFL season."""
-    validate_season(season)
+    """Download one season of a dataset and save the source Parquet unchanged."""
+    spec = get_dataset(dataset_name)
+    validate_season(spec, season)
 
-    source_url = PBP_URL_TEMPLATE.format(season=season)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    output_path = output_dir / f"nfl_play_by_play_{season}_raw.csv.gz"
-    metadata_path = output_dir / f"nfl_play_by_play_{season}_raw.metadata.json"
+    source_url = spec.source_url(season)
+    output_path = spec.raw_path(season, raw_dir)
 
-    rows_written = 0
-    with urlopen(source_url, timeout=60) as response:
-        validate_content_length(response.headers.get("Content-Length"))
+    with staged_output(output_path) as temp_path:
+        with urlopen(source_url, timeout=60) as response, temp_path.open("wb") as output:
+            expected_bytes = _validate_content_length(
+                response.headers.get("Content-Length"), spec.max_download_bytes
+            )
+            bytes_written = _copy_limited(
+                response,
+                output,
+                max_bytes=spec.max_download_bytes,
+                expected_bytes=expected_bytes,
+            )
 
-        with gzip.GzipFile(fileobj=response) as compressed_source:
-            text_source = io.TextIOWrapper(compressed_source)
-            reader = csv.DictReader(text_source)
-            validate_required_columns(reader.fieldnames)
-
-            with NamedTemporaryFile(
-                "wb", dir=output_dir, prefix=f".{output_path.stem}.", delete=False
-            ) as temp_file:
-                temp_path = Path(temp_file.name)
-
-            try:
-                with gzip.open(temp_path, "wt", newline="") as output_file:
-                    writer = csv.DictWriter(output_file, fieldnames=reader.fieldnames)
-                    writer.writeheader()
-
-                    for row in reader:
-                        writer.writerow(row)
-                        rows_written += 1
-
-                temp_path.replace(output_path)
-            finally:
-                if temp_path.exists():
-                    temp_path.unlink()
+        parquet_file = pq.ParquetFile(temp_path)
+        column_names = parquet_file.schema_arrow.names
+        _validate_required_columns(spec, column_names)
+        rows_written = parquet_file.metadata.num_rows
 
     write_metadata(
-        metadata_path,
-        source_url=source_url,
-        season=season,
-        output_path=output_path,
-        rows_written=rows_written,
-        source_column_count=len(reader.fieldnames or []),
+        output_path,
+        {
+            "source": "nflverse/nflverse-data GitHub release",
+            "source_url": source_url,
+            "downloaded_at": datetime.now(timezone.utc).isoformat(),
+            "dataset": spec.name,
+            "season": season,
+            "scope": "all_nfl",
+            "output_path": str(output_path),
+            "bytes": bytes_written,
+            "rows_written": rows_written,
+            "source_column_count": len(column_names),
+            "required_columns": sorted(spec.source_columns),
+        },
     )
 
     return output_path, rows_written
@@ -136,17 +117,30 @@ def save_raw_nfl_play_by_play(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Download raw play-by-play data for one NFL season."
+        description="Download raw nflverse data for one or more NFL seasons."
     )
-    parser.add_argument("season", type=int, help="NFL season to download, such as 2023")
+    parser.add_argument("dataset", choices=DATASETS, help="Dataset to download")
+    parser.add_argument(
+        "seasons", nargs="+", type=int, help="NFL seasons to download, such as 2023"
+    )
     args = parser.parse_args()
 
+    spec = get_dataset(args.dataset)
+    # save_raw validates each season too; checking all of them first keeps a bad
+    # season at the end of the list from leaving a partially downloaded run.
     try:
-        output_path, rows_written = save_raw_nfl_play_by_play(args.season)
+        for season in args.seasons:
+            validate_season(spec, season)
     except ValueError as error:
         parser.error(str(error))
 
-    print(f"Saved {rows_written} raw NFL play rows to {output_path}")
+    for season in args.seasons:
+        try:
+            output_path, rows_written = save_raw(args.dataset, season)
+        except (ValueError, OSError, pa.ArrowException) as error:
+            parser.exit(1, f"Failed to download {args.dataset} {season}: {error}\n")
+
+        print(f"Saved {rows_written} raw {args.dataset} rows to {output_path}")
 
 
 if __name__ == "__main__":

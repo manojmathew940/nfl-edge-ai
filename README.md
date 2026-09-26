@@ -58,16 +58,18 @@ component responsibilities, data boundaries, and failure paths.
 
 ## Raw Data Ingestion
 
-Download every raw NFL play-by-play row for one season:
+Every approved dataset is defined once in `app/data_foundation/datasets.py`.
+Download raw nflverse data by naming the dataset and one or more seasons:
 
 ```bash
-python3 -m app.data_foundation.ingestion 2024
+python3 -m app.data_foundation.ingestion plays 2024
+python3 -m app.data_foundation.ingestion plays 2020 2021 2022 2023 2024 2025
 ```
 
-This saves the complete raw season to:
+This saves each complete raw season unchanged from the nflverse release:
 
 ```text
-data/raw/nfl_play_by_play_2024_raw.csv.gz
+data/raw/nfl_play_by_play_2024_raw.parquet
 ```
 
 The script also writes a metadata file next to the raw data:
@@ -76,14 +78,18 @@ The script also writes a metadata file next to the raw data:
 data/raw/nfl_play_by_play_2024_raw.metadata.json
 ```
 
-The raw data is intentionally saved before normalization so the source columns can be inspected before deciding the analysis-ready schema mapping. The ingestion script validates the season range, checks required nflverse columns, limits the compressed source size, and only writes into `data/raw/`.
+The raw data is intentionally saved before normalization so the source columns
+can be inspected before deciding the analysis-ready schema mapping. Ingestion
+validates the season range, enforces the download size limit on the bytes
+received, checks the byte count against `Content-Length`, checks required
+source columns, and only replaces an existing file after every check passes.
 
 ## Processed Play Data
 
-Create the first curated play-level dataset for a season:
+Create curated play-level data for one or more seasons:
 
 ```bash
-python3 -m app.data_foundation.cleaning 2024
+python3 -m app.data_foundation.cleaning plays 2024
 ```
 
 This reads the raw NFL play-by-play file and writes:
@@ -91,6 +97,10 @@ This reads the raw NFL play-by-play file and writes:
 ```text
 data/processed/nfl_plays_2024.parquet
 ```
+
+Cleaning keeps the documented source columns, stores blank strings as nulls,
+stores columns documented as `integer` in the schema YAML as integers, adds
+derived fields, and rejects null or duplicate `game_id`/`play_id` keys.
 
 ## Run The App
 

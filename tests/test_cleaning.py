@@ -7,23 +7,25 @@ import unittest
 import pandas as pd
 
 from app.data_foundation.cleaning import (
-    SOURCE_COLUMNS,
-    add_derived_fields,
-    processed_path_for_season,
-    raw_path_for_season,
-    save_processed_nfl_play_by_play,
-    select_source_columns,
+    _normalize_source_values,
+    save_processed,
+    _select_source_columns,
 )
+from app.data_foundation.datasets import get_dataset
+from app.data_foundation.plays import SOURCE_COLUMNS, add_derived_fields
+
+
+PLAYS = get_dataset("plays")
 
 
 class CleaningTest(unittest.TestCase):
     def test_paths_use_nfl_wide_names(self) -> None:
         self.assertEqual(
-            raw_path_for_season(2024, Path("raw")),
-            Path("raw/nfl_play_by_play_2024_raw.csv.gz"),
+            PLAYS.raw_path(2024, Path("raw")),
+            Path("raw/nfl_play_by_play_2024_raw.parquet"),
         )
         self.assertEqual(
-            processed_path_for_season(2024, Path("processed")),
+            PLAYS.processed_path(2024, Path("processed")),
             Path("processed/nfl_plays_2024.parquet"),
         )
 
@@ -70,7 +72,7 @@ class CleaningTest(unittest.TestCase):
 
     def test_select_source_columns_rejects_incomplete_source(self) -> None:
         with self.assertRaisesRegex(ValueError, "missing required processed columns"):
-            select_source_columns(pd.DataFrame({"season": [2024]}))
+            _select_source_columns(PLAYS, pd.DataFrame({"season": [2024]}))
 
     def test_saves_complete_source_as_processed_parquet(self) -> None:
         row = {column: None for column in SOURCE_COLUMNS}
@@ -99,17 +101,18 @@ class CleaningTest(unittest.TestCase):
             raw_dir = root / "raw"
             processed_dir = root / "processed"
             raw_dir.mkdir()
-            pd.DataFrame([row]).to_csv(
-                raw_path_for_season(2024, raw_dir), index=False, compression="gzip"
-            )
+            pd.DataFrame([row]).to_parquet(PLAYS.raw_path(2024, raw_dir), index=False)
 
-            output_path, row_count, column_count = save_processed_nfl_play_by_play(
-                2024, raw_dir, processed_dir
+            output_path, row_count, column_count = save_processed(
+                "plays", 2024, raw_dir, processed_dir
             )
             processed = pd.read_parquet(output_path)
 
             self.assertEqual(row_count, 1)
-            self.assertEqual(column_count, len(SOURCE_COLUMNS) + 4)
+            self.assertEqual(column_count, len(processed.columns))
+            self.assertEqual(
+                tuple(processed.columns), PLAYS.source_columns + PLAYS.derived_columns
+            )
             self.assertEqual(processed["posteam"].tolist(), ["ARI"])
             self.assertEqual(processed["turnover"].tolist(), [False])
             self.assertEqual(processed["third_down_attempt"].tolist(), [True])
@@ -123,17 +126,61 @@ class CleaningTest(unittest.TestCase):
             processed_dir = root / "processed"
             raw_dir.mkdir()
             processed_dir.mkdir()
-            output_path = processed_path_for_season(2024, processed_dir)
+            output_path = PLAYS.processed_path(2024, processed_dir)
             output_path.write_bytes(b"existing-data")
             incomplete = pd.DataFrame({"season": [2024]})
-            incomplete.to_csv(
-                raw_path_for_season(2024, raw_dir), index=False, compression="gzip"
-            )
+            incomplete.to_parquet(PLAYS.raw_path(2024, raw_dir), index=False)
 
             with self.assertRaisesRegex(ValueError, "missing required processed columns"):
-                save_processed_nfl_play_by_play(2024, raw_dir, processed_dir)
+                save_processed("plays", 2024, raw_dir, processed_dir)
 
             self.assertEqual(output_path.read_bytes(), b"existing-data")
+
+    def test_normalizes_blank_strings_and_documented_integer_columns(self) -> None:
+        plays = pd.DataFrame(
+            {
+                "play_id": [1.0, 2.0, None],
+                "surface": ["grass", "", None],
+                "epa": [0.5, 1.0, None],
+            }
+        )
+
+        result = _normalize_source_values(PLAYS, plays)
+
+        self.assertEqual(str(result["play_id"].dtype), "Int64")
+        self.assertEqual(result["play_id"].tolist()[:2], [1, 2])
+        self.assertTrue(pd.isna(result["play_id"].iloc[2]))
+        self.assertEqual(result["surface"].iloc[0], "grass")
+        self.assertTrue(result["surface"].iloc[1:].isna().all())
+        self.assertEqual(str(result["epa"].dtype), "float64")
+
+    def test_fractional_value_in_integer_column_raises(self) -> None:
+        with self.assertRaisesRegex(ValueError, "plays.qtr is documented as integer"):
+            _normalize_source_values(PLAYS, pd.DataFrame({"qtr": [1.0, 2.5]}))
+
+    def test_rejects_duplicate_keys(self) -> None:
+        rows = []
+        for _ in range(2):
+            row = {column: None for column in SOURCE_COLUMNS}
+            row.update({"game_id": "2024_01_ARI_BUF", "play_id": 1})
+            rows.append(row)
+
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "raw").mkdir()
+            pd.DataFrame(rows).to_parquet(PLAYS.raw_path(2024, root / "raw"), index=False)
+
+            with self.assertRaisesRegex(ValueError, "1 duplicate rows for key"):
+                save_processed("plays", 2024, root / "raw", root / "processed")
+
+            self.assertFalse(PLAYS.processed_path(2024, root / "processed").exists())
+
+    def test_missing_raw_file_names_ingestion_command(self) -> None:
+        with TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(
+                FileNotFoundError, "ingestion plays 2024"
+            ):
+                save_processed("plays", 2024, Path(directory), Path(directory))
 
 
 if __name__ == "__main__":

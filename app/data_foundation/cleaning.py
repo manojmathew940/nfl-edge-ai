@@ -2,261 +2,140 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from tempfile import NamedTemporaryFile
+
+import pandas as pd
+import yaml
+
+from app.data_foundation.datasets import (
+    DATASETS,
+    PROCESSED_DATA_DIR,
+    RAW_DATA_DIR,
+    DatasetSpec,
+    get_dataset,
+)
+from app.data_foundation.file_io import staged_output
 
 
-RAW_DATA_DIR = Path("data/raw")
-PROCESSED_DATA_DIR = Path("data/processed")
-
-SOURCE_COLUMNS = [
-    "season",
-    "season_type",
-    "week",
-    "game_id",
-    "game_date",
-    "home_team",
-    "away_team",
-    "location",
-    "result",
-    "home_score",
-    "away_score",
-    "div_game",
-    "roof",
-    "surface",
-    "temp",
-    "wind",
-    "play_id",
-    "drive",
-    "fixed_drive",
-    "fixed_drive_result",
-    "qtr",
-    "time",
-    "quarter_seconds_remaining",
-    "half_seconds_remaining",
-    "game_seconds_remaining",
-    "down",
-    "ydstogo",
-    "yardline_100",
-    "yrdln",
-    "goal_to_go",
-    "desc",
-    "play_type",
-    "play_type_nfl",
-    "posteam",
-    "posteam_type",
-    "defteam",
-    "side_of_field",
-    "posteam_score",
-    "defteam_score",
-    "score_differential",
-    "posteam_score_post",
-    "defteam_score_post",
-    "score_differential_post",
-    "total_home_score",
-    "total_away_score",
-    "yards_gained",
-    "first_down",
-    "touchdown",
-    "td_team",
-    "interception",
-    "fumble",
-    "fumble_lost",
-    "sack",
-    "qb_hit",
-    "penalty",
-    "penalty_team",
-    "penalty_type",
-    "penalty_yards",
-    "safety",
-    "tackled_for_loss",
-    "third_down_converted",
-    "third_down_failed",
-    "fourth_down_converted",
-    "fourth_down_failed",
-    "rush_attempt",
-    "pass_attempt",
-    "complete_pass",
-    "incomplete_pass",
-    "qb_dropback",
-    "shotgun",
-    "no_huddle",
-    "qb_scramble",
-    "qb_kneel",
-    "qb_spike",
-    "pass_length",
-    "pass_location",
-    "air_yards",
-    "yards_after_catch",
-    "run_location",
-    "run_gap",
-    "passing_yards",
-    "receiving_yards",
-    "rushing_yards",
-    "lateral_reception",
-    "lateral_rush",
-    "lateral_receiver_player_id",
-    "lateral_receiver_player_name",
-    "lateral_receiving_yards",
-    "lateral_rusher_player_id",
-    "lateral_rusher_player_name",
-    "lateral_rushing_yards",
-    "passer_player_id",
-    "passer_player_name",
-    "receiver_player_id",
-    "receiver_player_name",
-    "rusher_player_id",
-    "rusher_player_name",
-    "special_teams_play",
-    "special",
-    "kickoff_attempt",
-    "punt_attempt",
-    "field_goal_attempt",
-    "extra_point_attempt",
-    "two_point_attempt",
-    "field_goal_result",
-    "extra_point_result",
-    "two_point_conv_result",
-    "kick_distance",
-    "return_team",
-    "return_yards",
-    "drive_play_count",
-    "drive_time_of_possession",
-    "drive_first_downs",
-    "drive_inside20",
-    "drive_ended_with_score",
-    "drive_quarter_start",
-    "drive_quarter_end",
-    "drive_yards_penalized",
-    "drive_start_transition",
-    "drive_end_transition",
-    "drive_game_clock_start",
-    "drive_game_clock_end",
-    "drive_start_yard_line",
-    "drive_end_yard_line",
-    "drive_play_id_started",
-    "drive_play_id_ended",
-    "epa",
-    "wp",
-    "wpa",
-    "home_wp",
-    "away_wp",
-    "success",
-    "ep",
-    "cp",
-    "cpoe",
-    "xpass",
-    "pass_oe",
-    "qb_epa",
-]
-
-
-def raw_path_for_season(season: int, raw_dir: Path = RAW_DATA_DIR) -> Path:
-    return raw_dir / f"nfl_play_by_play_{season}_raw.csv.gz"
-
-
-def processed_path_for_season(
-    season: int, processed_dir: Path = PROCESSED_DATA_DIR
-) -> Path:
-    return processed_dir / f"nfl_plays_{season}.parquet"
-
-
-def load_raw_nfl_play_by_play(
-    season: int, raw_dir: Path = RAW_DATA_DIR
-) -> pd.DataFrame:
-    try:
-        import pandas as pd
-    except ModuleNotFoundError as error:
-        raise RuntimeError(
-            "Missing dependency: pandas. Install project dependencies with "
-            "`python3 -m pip install -r requirements.txt`."
-        ) from error
-
-    raw_path = raw_path_for_season(season, raw_dir)
+def _load_raw(spec: DatasetSpec, season: int, raw_dir: Path = RAW_DATA_DIR) -> pd.DataFrame:
+    raw_path = spec.raw_path(season, raw_dir)
     if not raw_path.exists():
-        raise FileNotFoundError(f"Missing raw data file: {raw_path}")
+        raise FileNotFoundError(
+            f"Missing raw data file: {raw_path}. Run: "
+            f"python3 -m app.data_foundation.ingestion {spec.name} {season}"
+        )
 
-    return pd.read_csv(raw_path, low_memory=False)
+    return pd.read_parquet(raw_path)
 
 
-def select_source_columns(play_by_play: pd.DataFrame) -> pd.DataFrame:
+def _select_source_columns(spec: DatasetSpec, raw: pd.DataFrame) -> pd.DataFrame:
     missing_columns = [
-        column for column in SOURCE_COLUMNS if column not in play_by_play.columns
+        column for column in spec.source_columns if column not in raw.columns
     ]
     if missing_columns:
         raise ValueError(
-            "Raw play-by-play data is missing required processed columns: "
+            f"Raw {spec.name} data is missing required processed columns: "
             + ", ".join(missing_columns)
         )
 
-    return play_by_play.loc[:, SOURCE_COLUMNS].copy()
+    return raw.loc[:, list(spec.source_columns)].copy()
 
 
-def add_derived_fields(play_by_play: pd.DataFrame) -> pd.DataFrame:
-    play_by_play = play_by_play.sort_values(["game_id", "play_id"]).copy()
-
-    play_by_play["turnover"] = (
-        play_by_play[["interception", "fumble_lost"]].fillna(0).astype(int).sum(axis=1)
-        > 0
-    )
-    play_by_play["third_down_attempt"] = play_by_play["down"] == 3
-    play_by_play["red_zone_play"] = play_by_play["yardline_100"] <= 20
-    play_by_play["explosive_play"] = (
-        ((play_by_play["pass_attempt"] == 1) & (play_by_play["yards_gained"] >= 20))
-        | ((play_by_play["rush_attempt"] == 1) & (play_by_play["yards_gained"] >= 10))
-    )
-
-    return play_by_play
+def _declared_integer_columns(spec: DatasetSpec) -> list[str]:
+    schema = yaml.safe_load(spec.schema_path.read_text())
+    return [
+        column
+        for column, metadata in schema["columns"].items()
+        if metadata.get("type") == "integer"
+    ]
 
 
-def clean_nfl_play_by_play(
-    season: int, raw_dir: Path = RAW_DATA_DIR
+def _normalize_source_values(spec: DatasetSpec, processed: pd.DataFrame) -> pd.DataFrame:
+    """Store blank strings as nulls and whole-number columns as integers.
+
+    nflverse Parquet stores some whole-number fields as doubles. Integer columns
+    come from the dataset's schema YAML so the processed file matches its docs;
+    a fractional value in one of them fails loudly instead of being truncated.
+    """
+    for column in processed.columns:
+        if pd.api.types.is_string_dtype(processed[column]):
+            processed[column] = processed[column].mask(processed[column] == "")
+
+    for column in _declared_integer_columns(spec):
+        if column not in processed.columns:
+            continue
+        try:
+            processed[column] = processed[column].astype("Int64")
+        except (TypeError, ValueError) as error:
+            raise ValueError(
+                f"{spec.name}.{column} is documented as integer but has "
+                f"non-integer values: {error}"
+            ) from error
+
+    return processed
+
+
+def _validate_keys(spec: DatasetSpec, processed: pd.DataFrame) -> None:
+    key_columns = list(spec.key_columns)
+    null_keys = processed[key_columns].isna().any(axis=1)
+    if null_keys.any():
+        raise ValueError(
+            f"{spec.name} has {int(null_keys.sum())} rows with null key columns: "
+            + ", ".join(key_columns)
+        )
+
+    duplicate_keys = processed.duplicated(key_columns)
+    if duplicate_keys.any():
+        raise ValueError(
+            f"{spec.name} has {int(duplicate_keys.sum())} duplicate rows for key: "
+            + ", ".join(key_columns)
+        )
+
+
+def _clean_dataset(
+    spec: DatasetSpec, season: int, raw_dir: Path = RAW_DATA_DIR
 ) -> pd.DataFrame:
-    raw_play_by_play = load_raw_nfl_play_by_play(season, raw_dir)
-    processed_play_by_play = select_source_columns(raw_play_by_play)
-    return add_derived_fields(processed_play_by_play)
+    processed = _select_source_columns(spec, _load_raw(spec, season, raw_dir))
+    processed = _normalize_source_values(spec, processed)
+    if spec.derive is not None:
+        processed = spec.derive(processed)
+    _validate_keys(spec, processed)
+    return processed
 
 
-def save_processed_nfl_play_by_play(
+def save_processed(
+    dataset_name: str,
     season: int,
     raw_dir: Path = RAW_DATA_DIR,
     processed_dir: Path = PROCESSED_DATA_DIR,
 ) -> tuple[Path, int, int]:
-    processed_play_by_play = clean_nfl_play_by_play(season, raw_dir)
+    spec = get_dataset(dataset_name)
+    processed = _clean_dataset(spec, season, raw_dir)
 
-    processed_dir.mkdir(parents=True, exist_ok=True)
-    output_path = processed_path_for_season(season, processed_dir)
-    with NamedTemporaryFile(
-        "wb", dir=processed_dir, prefix=f".{output_path.stem}.", delete=False
-    ) as temp_file:
-        temp_path = Path(temp_file.name)
+    output_path = spec.processed_path(season, processed_dir)
+    with staged_output(output_path) as temp_path:
+        processed.to_parquet(temp_path, index=False)
 
-    try:
-        processed_play_by_play.to_parquet(temp_path, index=False)
-        temp_path.replace(output_path)
-    finally:
-        if temp_path.exists():
-            temp_path.unlink()
-
-    row_count, column_count = processed_play_by_play.shape
-
+    row_count, column_count = processed.shape
     return output_path, row_count, column_count
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Create processed NFL play-level data for one season."
+        description="Create processed analytics data for one or more NFL seasons."
     )
-    parser.add_argument("season", type=int, help="NFL season to process, such as 2024")
+    parser.add_argument("dataset", choices=DATASETS, help="Dataset to process")
+    parser.add_argument(
+        "seasons", nargs="+", type=int, help="NFL seasons to process, such as 2024"
+    )
     args = parser.parse_args()
 
-    try:
-        output_path, row_count, column_count = save_processed_nfl_play_by_play(
-            args.season
-        )
-    except (FileNotFoundError, RuntimeError, ValueError) as error:
-        parser.error(str(error))
+    for season in args.seasons:
+        try:
+            output_path, row_count, column_count = save_processed(args.dataset, season)
+        except (FileNotFoundError, ValueError) as error:
+            parser.exit(1, f"Failed to process {args.dataset} {season}: {error}\n")
 
-    print(f"Saved {row_count} rows and {column_count} columns to {output_path}")
+        print(f"Saved {row_count} rows and {column_count} columns to {output_path}")
 
 
 if __name__ == "__main__":

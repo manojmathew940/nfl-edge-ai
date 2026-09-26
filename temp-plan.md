@@ -17,7 +17,7 @@ Make league-wide play-by-play the primary analytics source.
 
 1. Update ingestion to retain every NFL game instead of filtering for `BUF`.
 2. Save raw and processed files with generic names:
-   - `nfl_play_by_play_<season>_raw.csv.gz`
+   - `nfl_play_by_play_<season>_raw.parquet`
    - `nfl_plays_<season>.parquet`
 3. Replace Bills-perspective fields with neutral football fields based on the
    possession team, defensive team, home team, and away team.

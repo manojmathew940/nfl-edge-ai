@@ -11,13 +11,13 @@ import pyarrow.parquet as pq
 from app.analytics.sql_execution import validate_and_execute_analytics_sql
 from app.analytics.sql_views import (
     AnalyticsViewError,
-    season_from_path,
+    _season_from_path,
 )
 
 
 def expected_rows_by_season(paths: list[Path]) -> list[tuple[int, int]]:
     return [
-        (season_from_path(path), pq.ParquetFile(path).metadata.num_rows)
+        (_season_from_path(path), pq.ParquetFile(path).metadata.num_rows)
         for path in paths
     ]
 
@@ -41,8 +41,8 @@ class SqlExecutionTest(unittest.TestCase):
             )
             self.paths.append(path)
         self.paths_patch = patch(
-            "app.analytics.sql_views.processed_play_paths",
-            return_value=self.paths,
+            "app.data_foundation.datasets.PROCESSED_DATA_DIR",
+            Path(self.temp_directory.name),
         )
         self.paths_patch.start()
 

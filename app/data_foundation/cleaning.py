@@ -63,14 +63,19 @@ def _normalize_source_values(spec: DatasetSpec, processed: pd.DataFrame) -> pd.D
     return processed
 
 
-def _validate_keys(spec: DatasetSpec, processed: pd.DataFrame) -> None:
+def _validate_keys(
+    spec: DatasetSpec, processed: pd.DataFrame
+) -> tuple[pd.DataFrame, int]:
+    """Return rows with valid keys and how many null-key rows were dropped."""
     key_columns = list(spec.key_columns)
     null_keys = processed[key_columns].isna().any(axis=1)
-    if null_keys.any():
+    dropped_rows = int(null_keys.sum())
+    if dropped_rows and not spec.drop_null_key_rows:
         raise ValueError(
-            f"{spec.name} has {int(null_keys.sum())} rows with null key columns: "
+            f"{spec.name} has {dropped_rows} rows with null key columns: "
             + ", ".join(key_columns)
         )
+    processed = processed[~null_keys]
 
     duplicate_keys = processed.duplicated(key_columns)
     if duplicate_keys.any():
@@ -79,16 +84,17 @@ def _validate_keys(spec: DatasetSpec, processed: pd.DataFrame) -> None:
             + ", ".join(key_columns)
         )
 
+    return processed, dropped_rows
+
 
 def _clean_dataset(
     spec: DatasetSpec, season: int, raw_dir: Path = RAW_DATA_DIR
-) -> pd.DataFrame:
+) -> tuple[pd.DataFrame, int]:
     processed = _select_source_columns(spec, _load_raw(spec, season, raw_dir))
     processed = _normalize_source_values(spec, processed)
     if spec.derive is not None:
         processed = spec.derive(processed)
-    _validate_keys(spec, processed)
-    return processed
+    return _validate_keys(spec, processed)
 
 
 def save_processed(
@@ -96,16 +102,17 @@ def save_processed(
     season: int,
     raw_dir: Path = RAW_DATA_DIR,
     processed_dir: Path = PROCESSED_DATA_DIR,
-) -> tuple[Path, int, int]:
+) -> tuple[Path, int, int, int]:
+    """Clean one season; return the path, row count, column count, and rows dropped."""
     spec = get_dataset(dataset_name)
-    processed = _clean_dataset(spec, season, raw_dir)
+    processed, dropped_rows = _clean_dataset(spec, season, raw_dir)
 
     output_path = spec.processed_path(season, processed_dir)
     with staged_output(output_path) as temp_path:
         processed.to_parquet(temp_path, index=False)
 
     row_count, column_count = processed.shape
-    return output_path, row_count, column_count
+    return output_path, row_count, column_count, dropped_rows
 
 
 def main() -> None:
@@ -120,11 +127,16 @@ def main() -> None:
 
     for season in args.seasons:
         try:
-            output_path, row_count, column_count = save_processed(args.dataset, season)
+            output_path, row_count, column_count, dropped_rows = save_processed(
+                args.dataset, season
+            )
         except (FileNotFoundError, ValueError) as error:
             parser.exit(1, f"Failed to process {args.dataset} {season}: {error}\n")
 
-        print(f"Saved {row_count} rows and {column_count} columns to {output_path}")
+        dropped = f" (dropped {dropped_rows} rows with null keys)" if dropped_rows else ""
+        print(
+            f"Saved {row_count} rows and {column_count} columns to {output_path}{dropped}"
+        )
 
 
 if __name__ == "__main__":

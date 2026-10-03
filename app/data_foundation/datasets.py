@@ -43,6 +43,9 @@ class DatasetSpec:
     min_season: int
     max_download_bytes: int
     derive: Callable[[pd.DataFrame], pd.DataFrame] | None = None
+    # Drop (and count) rows with a null key instead of failing, for sources that
+    # include rows the dataset's grain cannot represent.
+    drop_null_key_rows: bool = False
 
     def source_url(self, season: int) -> str:
         return self.source_url_template.format(season=season)
@@ -96,6 +99,21 @@ DATASETS: dict[str, DatasetSpec] = {
         min_season=1999,
         max_download_bytes=200 * 1024 * 1024,
         derive=plays.add_derived_fields,
+    ),
+    "player_weekly": DatasetSpec(
+        name="player_weekly",
+        view_name="nfl_player_weekly",
+        source_url_template=(
+            f"{NFLVERSE_RELEASE_URL}/stats_player/stats_player_week_{{season}}.parquet"
+        ),
+        raw_filename_template="nfl_player_weekly_{season}_raw.parquet",
+        processed_filename_template="nfl_player_weekly_{season}.parquet",
+        key_columns=("player_id", "game_id"),
+        schema_path=SCHEMA_DIR / "nfl_player_weekly.yaml",
+        min_season=1999,
+        max_download_bytes=50 * 1024 * 1024,
+        # Team-level penalty and safety rows have no player_id.
+        drop_null_key_rows=True,
     ),
 }
 

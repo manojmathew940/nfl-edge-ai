@@ -30,6 +30,13 @@ class SchemaMetadataTest(unittest.TestCase):
             render_schema_guides(["plays"]), render_view_schema_guide("plays")
         )
 
+    def test_player_weekly_guide_includes_usage_notes(self) -> None:
+        guide = render_view_schema_guide("player_weekly")
+
+        self.assertIn("Approved view: nfl_player_weekly", guide)
+        self.assertIn("\nUsage notes:\n- Filter season_type explicitly", guide)
+        self.assertNotIn("Usage notes:", render_view_schema_guide("plays"))
+
 
 if __name__ == "__main__":
     unittest.main()

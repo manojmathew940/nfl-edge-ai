@@ -21,6 +21,10 @@ def render_view_schema_guide(dataset_name: str) -> str:
         description = metadata.get("description", "")
         lines.append(f"- {column_name} ({metadata['type']}): {description}")
 
+    usage_notes = schema.get("usage_notes", [])
+    if usage_notes:
+        lines += ["", "Usage notes:"] + [f"- {note}" for note in usage_notes]
+
     return "\n".join(lines).strip()
 
 

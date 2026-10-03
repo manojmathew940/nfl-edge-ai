@@ -9,12 +9,12 @@ query execution, and response serialization are deterministic application code.
 flowchart TD
     Question([User question])
     API[FastAPI POST /ask]
-    Schema[(schemas/nfl_plays.yaml)]
+    Schema[(schemas/*.yaml)]
     SchemaLoader[Python: load and render schema]
     Extractor[LLM 1: data extraction and SQL generation]
     Validator[Python: parse and validate SQL]
     Executor[Python: apply row limit and submit SQL]
-    Parquet[(NFL play Parquet files)]
+    Parquet[(Processed NFL Parquet files)]
     DuckDB[DuckDB query engine]
     Rows[Python: serialize columns and rows]
     Context[Python: build answer context]
@@ -31,7 +31,7 @@ flowchart TD
     Validator -->|Approved SQL| Executor
 
     Executor -->|Bounded SQL query| DuckDB
-    Parquet -->|nfl_plays view data| DuckDB
+    Parquet -->|nfl_plays and nfl_player_weekly views| DuckDB
     DuckDB -->|Columns and result rows| Rows
 
     API -->|Original question| Context
@@ -58,7 +58,7 @@ flowchart TD
 | Component | Type | Responsibility |
 | --- | --- | --- |
 | FastAPI `/ask` | Python | Orchestrates the request and returns a structured response. |
-| Schema metadata loader | Python | Converts `schemas/nfl_plays.yaml` into an LLM-readable schema guide. |
+| Schema metadata loader | Python | Converts each dataset schema in `app/data_foundation/schemas/` into an LLM-readable schema guide. |
 | Data extractor | LLM call 1 | Decides whether local data is useful and generates one SQL query when needed. |
 | SQL validator | Python | Allows a single read-only query against approved analytics views and blocks direct file access. |
 | SQL executor | Python | Applies the result limit and submits approved SQL to DuckDB. |

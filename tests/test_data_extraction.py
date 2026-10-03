@@ -31,6 +31,8 @@ class DataExtractionTest(unittest.TestCase):
             prompt,
         )
         self.assertIn("Approved view: nfl_plays", prompt)
+        self.assertIn("Approved view: nfl_player_weekly", prompt)
+        self.assertIn("- passing_cpoe (float):", prompt)
         self.assertIn("- season (integer): NFL season.", prompt)
         self.assertIn(
             "- passer_player_name (string): Player name for the passer.",

@@ -37,6 +37,9 @@ Questions unlocked:
 
 ## Phase 2: Add `nfl_player_weekly`
 
+Status: complete. Both schemas are in the current extraction prompt until
+Phase 3 adds dataset selection.
+
 Add league-wide weekly player statistics as a separate approved view.
 
 1. Download the current nflverse `stats_player` weekly Parquet files.

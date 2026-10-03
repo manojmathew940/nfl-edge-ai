@@ -16,11 +16,12 @@ from app.data_foundation.plays import add_derived_fields
 
 
 PLAYS = get_dataset("plays")
+PLAYER_WEEKLY = get_dataset("player_weekly")
 
 
-def source_frame(rows: int, **columns: list) -> pd.DataFrame:
+def source_frame(rows: int, spec=PLAYS, **columns: list) -> pd.DataFrame:
     """A raw-shaped frame with every source column, null unless given."""
-    frame = {column: [None] * rows for column in PLAYS.source_columns}
+    frame = {column: [None] * rows for column in spec.source_columns}
     frame.update(columns)
     return pd.DataFrame(frame)
 
@@ -110,12 +111,13 @@ class CleaningTest(unittest.TestCase):
             raw_dir.mkdir()
             pd.DataFrame([row]).to_parquet(PLAYS.raw_path(2024, raw_dir), index=False)
 
-            output_path, row_count, column_count = save_processed(
+            output_path, row_count, column_count, dropped_rows = save_processed(
                 "plays", 2024, raw_dir, processed_dir
             )
             processed = pd.read_parquet(output_path)
 
             self.assertEqual(row_count, 1)
+            self.assertEqual(dropped_rows, 0)
             self.assertEqual(column_count, len(processed.columns))
             self.assertEqual(list(processed.columns), list(PLAYS.columns))
             self.assertEqual(processed["posteam"].tolist(), ["ARI"])
@@ -161,6 +163,44 @@ class CleaningTest(unittest.TestCase):
     def test_fractional_value_in_integer_column_raises(self) -> None:
         with self.assertRaisesRegex(ValueError, "plays.qtr is documented as integer"):
             _normalize_source_values(PLAYS, source_frame(2, qtr=[1.0, 2.5]))
+
+    def test_plays_rejects_null_keys(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "raw").mkdir()
+            source_frame(1, game_id=["2024_01_ARI_BUF"], play_id=[None]).to_parquet(
+                PLAYS.raw_path(2024, root / "raw"), index=False
+            )
+
+            with self.assertRaisesRegex(ValueError, "1 rows with null key columns"):
+                save_processed("plays", 2024, root / "raw", root / "processed")
+
+    def test_player_weekly_drops_and_counts_rows_without_player(self) -> None:
+        raw = source_frame(
+            2,
+            PLAYER_WEEKLY,
+            player_id=["00-0034857", None],
+            game_id=["2024_01_ARI_BUF", "2024_01_ARI_BUF"],
+            team=["BUF", "BUF"],
+            passing_yards=[232.0, None],
+            def_sacks=[0.5, None],
+        )
+
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "raw").mkdir()
+            raw.to_parquet(PLAYER_WEEKLY.raw_path(2024, root / "raw"), index=False)
+
+            output_path, row_count, _, dropped_rows = save_processed(
+                "player_weekly", 2024, root / "raw", root / "processed"
+            )
+            processed = pd.read_parquet(output_path)
+
+        self.assertEqual((row_count, dropped_rows), (1, 1))
+        self.assertEqual(list(processed.columns), list(PLAYER_WEEKLY.columns))
+        self.assertEqual(processed["player_id"].tolist(), ["00-0034857"])
+        self.assertEqual(str(processed["passing_yards"].dtype), "Int64")
+        self.assertEqual(processed["def_sacks"].tolist(), [0.5])
 
     def test_rejects_duplicate_keys(self) -> None:
         rows = []

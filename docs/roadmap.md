@@ -35,7 +35,7 @@ available.
 Questions include situational EPA, success rate, play calling, drive outcomes,
 turnovers, explosive plays, and team comparisons.
 
-## Phase 2: Weekly Player Data
+## Phase 2: Weekly Player Data (complete)
 
 - Add nflverse weekly player statistics as `nfl_player_weekly`.
 - Preserve player, game, team, opponent, season, and week identifiers.

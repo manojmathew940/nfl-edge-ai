@@ -1,0 +1,184 @@
+view: nfl_player_weekly
+description: League-wide weekly player statistics built from nflverse stats_player data.
+grain: One row per player per game (player_id, game_id).
+usage_notes:
+  - Filter season_type explicitly; REG is regular season and POST is postseason. Postseason week numbers continue after the regular season, so do not use week to tell them apart.
+  - Stat columns are totals for that player in that game unless the description says rate, share, or average.
+  - Null metrics mean not applicable (for example passing_epa for a player with no dropbacks); they are not zero.
+  - For multi-game rates, divide summed components (for example SUM(passing_epa) / SUM(attempts + sacks_suffered)); do not average per-game rates.
+  - For players with very few attempts or targets, rates can be extreme; add a minimum volume filter when ranking.
+  - Join to nfl_plays on game_id and team = posteam for offensive stats, or team = defteam for defensive stats.
+  - Team-level penalty and safety rows without an identified player are excluded, so do not sum penalties here.
+  - Prefer this view over aggregating nfl_plays for player totals; it includes lateral yards and occasional official stat corrections.
+columns:
+  player_id:
+    type: string
+    description: Stable nflverse GSIS player identifier, such as 00-0034857; matches passer_player_id, rusher_player_id, and receiver_player_id in nfl_plays.
+  player_display_name:
+    type: string
+    description: Player full name, such as Josh Allen.
+  position:
+    type: string
+    description: Player position abbreviation, such as QB, WR, or CB.
+  position_group:
+    type: string
+    description: Position group, one of QB, RB, WR, TE, OL, DL, LB, DB, or SPEC.
+  season:
+    type: integer
+    description: NFL season.
+  week:
+    type: integer
+    description: NFL week number.
+  season_type:
+    type: string
+    description: REG for regular season or POST for postseason.
+  game_id:
+    type: string
+    description: Unique nflverse game identifier; matches game_id in nfl_plays.
+  team:
+    type: string
+    description: Team abbreviation the player played for in this game.
+  opponent_team:
+    type: string
+    description: Opposing team abbreviation in this game.
+  completions:
+    type: integer
+    description: Completed passes.
+  attempts:
+    type: integer
+    description: Pass attempts, excluding sacks.
+  passing_yards:
+    type: integer
+    description: Passing yards.
+  passing_tds:
+    type: integer
+    description: Passing touchdowns.
+  passing_interceptions:
+    type: integer
+    description: Interceptions thrown.
+  sacks_suffered:
+    type: integer
+    description: Times sacked.
+  sack_yards_lost:
+    type: integer
+    description: Yards lost on sacks.
+  passing_air_yards:
+    type: integer
+    description: Air yards on all pass attempts, completed or not.
+  passing_yards_after_catch:
+    type: integer
+    description: Yards after catch on completed passes.
+  passing_first_downs:
+    type: integer
+    description: First downs gained by passing.
+  passing_epa:
+    type: float
+    description: Total expected points added on pass attempts and sacks in this game.
+  passing_cpoe:
+    type: float
+    description: Average completion percentage over expected on pass attempts in this game, in percentage points. Across games, weight by attempts (SUM(passing_cpoe * attempts) / SUM(attempts) FILTER (WHERE passing_cpoe IS NOT NULL)) instead of AVG(passing_cpoe).
+  pacr:
+    type: float
+    description: Passing air conversion ratio, passing_yards divided by passing_air_yards.
+  carries:
+    type: integer
+    description: Rushing attempts.
+  rushing_yards:
+    type: integer
+    description: Rushing yards.
+  rushing_tds:
+    type: integer
+    description: Rushing touchdowns.
+  rushing_fumbles_lost:
+    type: integer
+    description: Fumbles lost on rushing plays.
+  rushing_first_downs:
+    type: integer
+    description: First downs gained by rushing.
+  rushing_epa:
+    type: float
+    description: Total expected points added on carries in this game.
+  receptions:
+    type: integer
+    description: Receptions.
+  targets:
+    type: integer
+    description: Times targeted by a pass.
+  receiving_yards:
+    type: integer
+    description: Receiving yards.
+  receiving_tds:
+    type: integer
+    description: Receiving touchdowns.
+  receiving_fumbles_lost:
+    type: integer
+    description: Fumbles lost after a reception.
+  receiving_air_yards:
+    type: integer
+    description: Air yards on all targets, caught or not.
+  receiving_yards_after_catch:
+    type: integer
+    description: Yards after catch.
+  receiving_first_downs:
+    type: integer
+    description: First downs gained by receiving.
+  receiving_epa:
+    type: float
+    description: Total expected points added on targets in this game.
+  racr:
+    type: float
+    description: Receiver air conversion ratio, receiving yards per air yard; not meaningful when receiving_air_yards is zero or negative.
+  target_share:
+    type: float
+    description: Share of the team's targets in this game, from 0 to 1.
+  air_yards_share:
+    type: float
+    description: Share of the team's air yards in this game, from 0 to 1.
+  wopr:
+    type: float
+    description: Weighted opportunity rating, 1.5 * target_share + 0.7 * air_yards_share.
+  fg_made:
+    type: integer
+    description: Field goals made.
+  fg_att:
+    type: integer
+    description: Field goal attempts.
+  fg_long:
+    type: integer
+    description: Longest field goal made in yards; null when no field goal was made.
+  fg_pct:
+    type: float
+    description: Field goals made divided by attempts, from 0 to 1; null when no attempts.
+  pat_made:
+    type: integer
+    description: Extra points made.
+  pat_att:
+    type: integer
+    description: Extra point attempts.
+  def_tackles_solo:
+    type: integer
+    description: Solo tackles.
+  def_tackle_assists:
+    type: integer
+    description: Assisted tackles.
+  def_tackles_for_loss:
+    type: integer
+    description: Tackles for loss.
+  def_sacks:
+    type: float
+    description: Sacks credited, including half sacks.
+  def_qb_hits:
+    type: integer
+    description: Quarterback hits.
+  def_interceptions:
+    type: integer
+    description: Interceptions made.
+  def_pass_defended:
+    type: integer
+    description: Passes defended.
+  def_fumbles_forced:
+    type: integer
+    description: Fumbles forced.
+  def_tds:
+    type: integer
+    description: Defensive touchdowns.

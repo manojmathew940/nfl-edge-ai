@@ -216,7 +216,7 @@ curl -X POST http://localhost:8000/ask \
 
 - [Request architecture](docs/architecture.md)
 - [NFL plays data guide](docs/data_schema.md)
-- [NFL plays machine-readable schema](docs/nfl_plays_schema.yaml)
+- [NFL plays schema (columns, types, descriptions)](app/data_foundation/schemas/nfl_plays.yaml)
 - [Local LLM and Ollama setup](docs/local_llm_setup.md)
 - [LLM debugging](docs/debugging.md)
 - [Project roadmap](docs/roadmap.md)

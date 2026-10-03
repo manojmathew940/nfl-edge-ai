@@ -1,10 +1,10 @@
+# Clean the data by normalizing the data and validating the keys.
 from __future__ import annotations
 
 import argparse
 from pathlib import Path
 
 import pandas as pd
-import yaml
 
 from app.data_foundation.datasets import (
     DATASETS,
@@ -40,15 +40,6 @@ def _select_source_columns(spec: DatasetSpec, raw: pd.DataFrame) -> pd.DataFrame
     return raw.loc[:, list(spec.source_columns)].copy()
 
 
-def _declared_integer_columns(spec: DatasetSpec) -> list[str]:
-    schema = yaml.safe_load(spec.schema_path.read_text())
-    return [
-        column
-        for column, metadata in schema["columns"].items()
-        if metadata.get("type") == "integer"
-    ]
-
-
 def _normalize_source_values(spec: DatasetSpec, processed: pd.DataFrame) -> pd.DataFrame:
     """Store blank strings as nulls and whole-number columns as integers.
 
@@ -60,7 +51,7 @@ def _normalize_source_values(spec: DatasetSpec, processed: pd.DataFrame) -> pd.D
         if pd.api.types.is_string_dtype(processed[column]):
             processed[column] = processed[column].mask(processed[column] == "")
 
-    for column in _declared_integer_columns(spec):
+    for column in spec.integer_columns:
         if column not in processed.columns:
             continue
         try:

@@ -419,13 +419,17 @@ columns:
     description: Quarterback expected points added on the play.
   turnover:
     type: boolean
+    derived: true
     description: True when the play produced an interception or lost fumble.
   third_down_attempt:
     type: boolean
+    derived: true
     description: True when the play was a third-down attempt.
   red_zone_play:
     type: boolean
+    derived: true
     description: True when the play started at or inside the opponent 20-yard line.
   explosive_play:
     type: boolean
+    derived: true
     description: True for explosive plays, defined as pass gains of at least 20 yards or rush gains of at least 10 yards.

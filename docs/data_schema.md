@@ -7,7 +7,7 @@ dataset used by the NFL AI Analyst. It explains the fields and football
 semantics needed to write correct analytics queries.
 
 The exhaustive machine-readable contract, including every column and data
-type, is maintained in `docs/nfl_plays_schema.yaml`.
+type, is maintained in `app/data_foundation/schemas/nfl_plays.yaml`.
 
 ## Row Grain
 

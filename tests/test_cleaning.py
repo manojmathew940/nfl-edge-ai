@@ -12,7 +12,7 @@ from app.data_foundation.cleaning import (
     _select_source_columns,
 )
 from app.data_foundation.datasets import get_dataset
-from app.data_foundation.plays import SOURCE_COLUMNS, add_derived_fields
+from app.data_foundation.plays import add_derived_fields
 
 
 PLAYS = get_dataset("plays")
@@ -75,7 +75,7 @@ class CleaningTest(unittest.TestCase):
             _select_source_columns(PLAYS, pd.DataFrame({"season": [2024]}))
 
     def test_saves_complete_source_as_processed_parquet(self) -> None:
-        row = {column: None for column in SOURCE_COLUMNS}
+        row = {column: None for column in PLAYS.source_columns}
         row.update(
             {
                 "season": 2024,
@@ -110,9 +110,7 @@ class CleaningTest(unittest.TestCase):
 
             self.assertEqual(row_count, 1)
             self.assertEqual(column_count, len(processed.columns))
-            self.assertEqual(
-                tuple(processed.columns), PLAYS.source_columns + PLAYS.derived_columns
-            )
+            self.assertEqual(list(processed.columns), list(PLAYS.columns))
             self.assertEqual(processed["posteam"].tolist(), ["ARI"])
             self.assertEqual(processed["turnover"].tolist(), [False])
             self.assertEqual(processed["third_down_attempt"].tolist(), [True])
@@ -161,7 +159,7 @@ class CleaningTest(unittest.TestCase):
     def test_rejects_duplicate_keys(self) -> None:
         rows = []
         for _ in range(2):
-            row = {column: None for column in SOURCE_COLUMNS}
+            row = {column: None for column in PLAYS.source_columns}
             row.update({"game_id": "2024_01_ARI_BUF", "play_id": 1})
             rows.append(row)
 

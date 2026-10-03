@@ -91,6 +91,16 @@ class SqlExecutionTest(unittest.TestCase):
         self.assertEqual(result.columns, [])
         self.assertEqual(result.rows, [])
 
+    def test_validate_and_execute_analytics_sql_reports_query_errors(self) -> None:
+        result = validate_and_execute_analytics_sql(
+            "SELECT receiver_player_name FROM nfl_player_weekly"
+        )
+
+        self.assertFalse(result.is_valid)
+        self.assertIn("SQL failed to run in DuckDB", result.validation_reason)
+        self.assertIn("receiver_player_name", result.validation_reason)
+        self.assertEqual(result.rows, [])
+
 
 if __name__ == "__main__":
     unittest.main()

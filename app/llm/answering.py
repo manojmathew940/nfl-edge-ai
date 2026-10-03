@@ -17,7 +17,8 @@ DEFAULT_MODEL = "gpt-5.5"
 DEFAULT_API_KEY = "ollama"
 DEFAULT_LOCAL_BASE_URL = "http://127.0.0.1:11434/v1"
 DEFAULT_LOCAL_MODEL = "qwen2.5:7b-instruct"
-MAX_ANSWER_OUTPUT_TOKENS = 900
+MAX_ANSWER_OUTPUT_TOKENS = 2000
+LLM_REASONING = {"effort": "low"}
 
 ANSWER_QUESTION_INSTRUCTIONS = """
 You are an NFL football analyst.
@@ -80,6 +81,33 @@ def get_llm_api_key(provider: str | None = None) -> str | None:
     return os.getenv("LLM_API_KEY") or os.getenv("OPENAI_API_KEY")
 
 
+def reasoning_options(provider: str | None = None) -> dict[str, Any]:
+    """Reasoning settings for a Responses API call.
+
+    Only OpenAI gets them. Local servers such as Ollama reject the setting for
+    models that do not support thinking.
+    """
+    if get_llm_base_url(provider):
+        return {}
+    return {"reasoning": LLM_REASONING}
+
+
+def raise_if_response_incomplete(response: Any, step: str) -> None:
+    """Raise when the model stopped early, e.g. after spending its token budget."""
+    incomplete_details = getattr(response, "incomplete_details", None)
+    if incomplete_details is None:
+        return
+
+    reason = getattr(incomplete_details, "reason", None)
+    if reason is None and isinstance(incomplete_details, dict):
+        reason = incomplete_details.get("reason")
+
+    if isinstance(reason, str) and reason:
+        raise LLMServiceError(
+            f"The LLM {step} returned an incomplete response. Reason: {reason}."
+        )
+
+
 def build_llm_client(provider: str | None = None) -> OpenAI:
     api_key = get_llm_api_key(provider)
     base_url = get_llm_base_url(provider)
@@ -122,9 +150,14 @@ def answer_question(
             instructions=ANSWER_QUESTION_INSTRUCTIONS,
             input=prompt,
             max_output_tokens=MAX_ANSWER_OUTPUT_TOKENS,
+            **reasoning_options(provider),
         )
     except OpenAIError as error:
         raise LLMServiceError("The LLM service failed to answer the question.") from error
+
+    raise_if_response_incomplete(response, "answer")
+    if not response.output_text.strip():
+        raise LLMServiceError("The LLM returned an empty answer.")
 
     return response.output_text
 
@@ -169,6 +202,7 @@ def build_answer_debug_payload(
             analytics_result,
         ),
         "max_output_tokens": MAX_ANSWER_OUTPUT_TOKENS,
+        **reasoning_options(provider),
     }
 
 

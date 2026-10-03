@@ -8,12 +8,28 @@ from openai import OpenAIError
 from app.analytics.sql_execution import AnalyticsSqlResult
 from app.llm.answering import (
     ANSWER_QUESTION_INSTRUCTIONS,
+    LLM_REASONING,
     LLMServiceError,
     _render_answer_question_prompt,
     answer_question,
     build_answer_debug_payload,
 )
 from app.llm.data_extraction import DataExtractionDecision
+
+
+NO_DATA_DECISION = DataExtractionDecision(
+    needs_data=False,
+    sql=None,
+    reason="No local data needed.",
+    confidence=0.6,
+    data_not_needed_reason="The question is general.",
+)
+
+
+def mock_client(response: Mock) -> Mock:
+    client = Mock()
+    client.responses.create.return_value = response
+    return client
 
 
 class AnsweringTest(unittest.TestCase):
@@ -139,6 +155,45 @@ class AnsweringTest(unittest.TestCase):
         self.assertEqual(call_kwargs["model"], "test-model")
         self.assertEqual(call_kwargs["instructions"], ANSWER_QUESTION_INSTRUCTIONS)
         self.assertIn("Question:\nWho are the Bills?", call_kwargs["input"])
+        self.assertNotIn("reasoning", call_kwargs)
+
+    @patch("app.llm.answering.get_llm_model", return_value="test-model")
+    @patch("app.llm.answering.build_llm_client")
+    def test_answer_question_sends_low_reasoning_to_openai(
+        self, build_client: Mock, get_model: Mock
+    ) -> None:
+        client = mock_client(Mock(incomplete_details=None, output_text="Answer."))
+        build_client.return_value = client
+
+        answer_question("Who are the Bills?", NO_DATA_DECISION, None, provider="openai")
+
+        call_kwargs = client.responses.create.call_args.kwargs
+        self.assertEqual(call_kwargs["reasoning"], LLM_REASONING)
+        self.assertEqual(call_kwargs["max_output_tokens"], 2000)
+
+    @patch("app.llm.answering.get_llm_model", return_value="test-model")
+    @patch("app.llm.answering.build_llm_client")
+    def test_answer_question_raises_when_token_budget_runs_out(
+        self, build_client: Mock, get_model: Mock
+    ) -> None:
+        build_client.return_value = mock_client(
+            Mock(incomplete_details={"reason": "max_output_tokens"}, output_text="")
+        )
+
+        with self.assertRaisesRegex(LLMServiceError, "answer.*max_output_tokens"):
+            answer_question("Who are the Bills?", NO_DATA_DECISION, None, provider="openai")
+
+    @patch("app.llm.answering.get_llm_model", return_value="test-model")
+    @patch("app.llm.answering.build_llm_client")
+    def test_answer_question_raises_on_empty_answer(
+        self, build_client: Mock, get_model: Mock
+    ) -> None:
+        build_client.return_value = mock_client(
+            Mock(incomplete_details=None, output_text="  ")
+        )
+
+        with self.assertRaisesRegex(LLMServiceError, "empty answer"):
+            answer_question("Who are the Bills?", NO_DATA_DECISION, None, provider="local")
 
     @patch("app.llm.answering.get_llm_model", return_value="test-model")
     @patch("app.llm.answering.build_llm_client")
@@ -186,9 +241,10 @@ class AnsweringTest(unittest.TestCase):
         self.assertEqual(payload["base_url"], "http://test")
         self.assertEqual(payload["instructions"], ANSWER_QUESTION_INSTRUCTIONS)
         self.assertIn("Question:\nWho are the Bills?", payload["input"])
-        self.assertEqual(payload["max_output_tokens"], 900)
+        self.assertEqual(payload["max_output_tokens"], 2000)
+        self.assertNotIn("reasoning", payload)
         get_model.assert_called_once_with("local")
-        get_base_url.assert_called_once_with("local")
+        get_base_url.assert_called_with("local")
 
 
 if __name__ == "__main__":

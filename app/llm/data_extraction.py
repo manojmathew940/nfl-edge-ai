@@ -15,11 +15,12 @@ from app.llm.answering import (
     build_llm_client,
     get_llm_base_url,
     get_llm_model,
+    raise_if_response_incomplete,
+    reasoning_options,
 )
 
 
 _MAX_DATA_EXTRACTION_OUTPUT_TOKENS = 2000
-_DATA_EXTRACTION_REASONING = {"effort": "low"}
 _FALLBACK_REASON = "Extractor did not provide a reason."
 _BLANK_SQL_REASON = "Extractor said data was needed but did not provide usable SQL."
 _DATA_EXTRACTION_RESPONSE_FORMAT = {
@@ -133,7 +134,7 @@ def run_data_extraction_llm(
             instructions=_EXTRACT_DATA_INSTRUCTIONS,
             input=prompt,
             max_output_tokens=_MAX_DATA_EXTRACTION_OUTPUT_TOKENS,
-            reasoning=_DATA_EXTRACTION_REASONING,
+            **reasoning_options(provider),
             text={"format": _DATA_EXTRACTION_RESPONSE_FORMAT},
         )
     except OpenAIError as error:
@@ -142,7 +143,7 @@ def run_data_extraction_llm(
         ) from error
 
     _print_data_extraction_response_debug(response)
-    _raise_if_response_incomplete(response)
+    raise_if_response_incomplete(response, "data extractor")
 
     return _parse_data_extraction_decision(response.output_text)
 
@@ -242,7 +243,7 @@ def build_data_extraction_debug_payload(
         "instructions": _EXTRACT_DATA_INSTRUCTIONS,
         "input": _render_data_extraction_prompt(question),
         "max_output_tokens": _MAX_DATA_EXTRACTION_OUTPUT_TOKENS,
-        "reasoning": _DATA_EXTRACTION_REASONING,
+        **reasoning_options(provider),
         "text": {"format": _DATA_EXTRACTION_RESPONSE_FORMAT},
     }
 
@@ -266,19 +267,3 @@ def _print_data_extraction_response_debug(response: Any) -> None:
     if callable(model_dump_json):
         print("\n=== LLM DATA EXTRACTION FULL RESPONSE ===")
         print(model_dump_json(indent=2))
-
-
-def _raise_if_response_incomplete(response: Any) -> None:
-    incomplete_details = getattr(response, "incomplete_details", None)
-    if incomplete_details is None:
-        return
-
-    reason = getattr(incomplete_details, "reason", None)
-    if reason is None and isinstance(incomplete_details, dict):
-        reason = incomplete_details.get("reason")
-
-    if isinstance(reason, str) and reason:
-        raise LLMServiceError(
-            "The LLM data extractor returned an incomplete response "
-            f"before producing JSON. Reason: {reason}."
-        )

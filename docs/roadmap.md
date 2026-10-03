@@ -21,10 +21,10 @@ the missing evidence instead of inventing an answer.
 8. Return the answer with the selected data, SQL, validation status, and rows.
 
 The current application combines data extraction and SQL generation in one LLM
-call. Dataset selection becomes a separate call after multiple datasets are
-available.
+call. Dataset selection becomes a separate call once the approved schemas no
+longer fit comfortably in one prompt (see Phase 4).
 
-## Phase 1: League-Wide Play Data
+## Phase 1: League-Wide Play Data (complete)
 
 - Ingest complete nflverse play-by-play seasons.
 - Clean them into `nfl_plays_<season>.parquet`.
@@ -45,7 +45,25 @@ turnovers, explosive plays, and team comparisons.
 This phase enables reliable player rankings and comparisons that cannot be
 answered completely from credited play participants alone.
 
-## Phase 3: Multi-Dataset LLM Workflow
+## Phase 3: Weekly Team Data
+
+- Add nflverse weekly team statistics as `nfl_team_weekly`.
+- Support standardized team rankings and trends without reconstructing every
+  summary from play rows.
+- Define joins through game and team identifiers.
+
+## Phase 4: Dataset Selection (when triggered)
+
+The current two-call flow stays while every approved schema fits comfortably
+in one prompt: the data extraction call sees all schema guides and writes SQL,
+and the answering call explains the evidence. A separate selection call adds
+latency and a failure mode the SQL call cannot recover from, so add it only
+when one of these triggers occurs:
+
+- The combined schema guides exceed about half the configured LLM context.
+- Debug logs show wrong-dataset or wrong-column SQL errors.
+
+Then split the flow into three calls:
 
 - LLM call 1 selects one or more approved datasets from a compact catalog.
 - Python validates the selection and loads only the selected schemas.
@@ -54,13 +72,6 @@ answered completely from credited play participants alone.
 - LLM call 3 explains only what the evidence supports.
 
 SQL repair is deferred until the basic three-call flow is stable.
-
-## Phase 4: Weekly Team Data
-
-- Add nflverse weekly team statistics as `nfl_team_weekly`.
-- Support standardized team rankings and trends without reconstructing every
-  summary from play rows.
-- Define joins through game and team identifiers.
 
 ## Later Data Expansion
 

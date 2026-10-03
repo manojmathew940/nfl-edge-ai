@@ -25,6 +25,22 @@ LOCAL_LLM_API_KEY=ollama
 `LOCAL_LLM_API_KEY` is a placeholder. Ollama does not require a real API key,
 but the OpenAI-compatible client expects a value.
 
+## Context Length
+
+The data extraction prompt includes every approved schema guide and is larger
+than Ollama's default 4096-token context. Ollama silently truncates the start
+of longer prompts, which drops the instructions. Raise the context before
+starting the server:
+
+```bash
+OLLAMA_CONTEXT_LENGTH=16384 ollama serve
+```
+
+On Windows, set `OLLAMA_CONTEXT_LENGTH` as a user environment variable and
+restart the Ollama application. Alternatively, set `PARAMETER num_ctx 16384`
+in a Modelfile. The OpenAI-compatible endpoint ignores per-request `num_ctx`.
+The Ollama server log warns when a prompt is truncated.
+
 ## Ollama On Windows With The App In WSL
 
 The preferred setup is WSL mirrored networking so Windows and WSL share

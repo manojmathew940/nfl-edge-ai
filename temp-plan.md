@@ -72,7 +72,12 @@ SQL generation, and grounded answer generation.
 3. **Python:** Validate the selected dataset names and load only their detailed
    schemas and documented join rules.
 4. **LLM call 2 - SQL generator:** Generate one SQL query using only the
-   selected schemas.
+   selected schemas. When more than one dataset is selected, render each schema
+   under its own clear header and tell the model that each column exists only in
+   the view it is listed under (use each view's alias in joins). The current
+   prompt says "the schema" and separates views only by a blank line; the local
+   model mixed columns across views, e.g. `receiver_player_name` on
+   `nfl_player_weekly`.
 5. **Python:** Validate the SQL with `sqlglot`.
 6. **Python:** Execute valid read-only SQL in DuckDB with row and execution
    limits.

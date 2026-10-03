@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+import duckdb
+
 from app.analytics.sql_views import AnalyticsViewError, create_analytics_connection
 from app.analytics.sql_validation import validate_analytics_sql
 
@@ -58,7 +60,17 @@ def validate_and_execute_analytics_sql(
             rows=[],
         )
 
-    result = _execute_analytics_sql(validation.sql, row_limit=row_limit)
+    try:
+        result = _execute_analytics_sql(validation.sql, row_limit=row_limit)
+    except duckdb.Error as error:
+        # Validation checks statements and views, not columns or types, so
+        # LLM SQL can still fail here (e.g. a column from the other view).
+        return AnalyticsSqlResult(
+            is_valid=False,
+            validation_reason=f"SQL failed to run in DuckDB: {error}",
+            columns=[],
+            rows=[],
+        )
     return AnalyticsSqlResult(
         is_valid=True,
         validation_reason=validation.reason,

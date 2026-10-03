@@ -5,12 +5,10 @@ from unittest.mock import Mock, patch
 
 from openai import OpenAIError
 
-from app.llm.answering import LLMServiceError
+from app.llm.answering import LLM_REASONING, LLMServiceError
 from app.llm.data_extraction import (
     _DATA_EXTRACTION_RESPONSE_FORMAT,
-    _DATA_EXTRACTION_REASONING,
     _EXTRACT_DATA_INSTRUCTIONS,
-    _raise_if_response_incomplete,
     _print_data_extraction_response_debug,
     _parse_data_extraction_decision,
     _render_data_extraction_prompt,
@@ -81,8 +79,44 @@ class DataExtractionTest(unittest.TestCase):
         self.assertEqual(call_kwargs["model"], "test-model")
         self.assertEqual(call_kwargs["instructions"], _EXTRACT_DATA_INSTRUCTIONS)
         self.assertEqual(call_kwargs["max_output_tokens"], 2000)
-        self.assertEqual(call_kwargs["reasoning"], _DATA_EXTRACTION_REASONING)
+        self.assertNotIn("reasoning", call_kwargs)
         self.assertEqual(call_kwargs["text"], {"format": _DATA_EXTRACTION_RESPONSE_FORMAT})
+
+    @patch("app.llm.data_extraction.get_llm_model", return_value="test-model")
+    @patch("app.llm.data_extraction.build_llm_client")
+    def test_run_data_extraction_sends_reasoning_only_to_openai(
+        self,
+        build_llm_client: Mock,
+        get_llm_model: Mock,
+    ) -> None:
+        client = Mock()
+        client.responses.create.return_value = Mock(
+            incomplete_details=None,
+            output_text='{"needs_data": false, "sql": null, "reason": "r", '
+            '"confidence": 0.5, "data_not_needed_reason": "n"}',
+        )
+        build_llm_client.return_value = client
+
+        run_data_extraction_llm("Who are the Bills?", provider="openai")
+
+        call_kwargs = client.responses.create.call_args.kwargs
+        self.assertEqual(call_kwargs["reasoning"], LLM_REASONING)
+
+    @patch("app.llm.data_extraction.get_llm_model", return_value="test-model")
+    @patch("app.llm.data_extraction.build_llm_client")
+    def test_run_data_extraction_raises_on_incomplete_response(
+        self,
+        build_llm_client: Mock,
+        get_llm_model: Mock,
+    ) -> None:
+        client = Mock()
+        client.responses.create.return_value = Mock(
+            incomplete_details={"reason": "max_output_tokens"}, output_text=""
+        )
+        build_llm_client.return_value = client
+
+        with self.assertRaisesRegex(LLMServiceError, "data extractor.*max_output_tokens"):
+            run_data_extraction_llm("Who are the Bills?", provider="openai")
 
     @patch("app.llm.data_extraction.get_llm_model", return_value="test-model")
     @patch("app.llm.data_extraction.build_llm_client")
@@ -104,12 +138,6 @@ class DataExtractionTest(unittest.TestCase):
         _print_data_extraction_response_debug(Mock(output_text="{}"))
 
         print_mock.assert_not_called()
-
-    def test_incomplete_response_raises_clear_error(self) -> None:
-        response = Mock(incomplete_details={"reason": "max_output_tokens"})
-
-        with self.assertRaisesRegex(LLMServiceError, "max_output_tokens"):
-            _raise_if_response_incomplete(response)
 
     def test_parses_valid_data_request(self) -> None:
         decision = _parse_data_extraction_decision(

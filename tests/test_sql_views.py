@@ -36,6 +36,7 @@ class SqlViewsTest(unittest.TestCase):
                     {
                         "season": [season],
                         "week": [1],
+                        "game_id": [f"{season}_01_ARI_BUF"],
                         "play_id": [1],
                         "qtr": [1],
                         "posteam": ["BUF"],
@@ -51,6 +52,20 @@ class SqlViewsTest(unittest.TestCase):
                 path,
             )
             self.paths.append(path)
+
+        self.player_path = self.data_dir / "nfl_player_weekly_2024.parquet"
+        pq.write_table(
+            pa.table(
+                {
+                    "season": [2024],
+                    "game_id": ["2024_01_ARI_BUF"],
+                    "player_id": ["00-0034857"],
+                    "team": ["BUF"],
+                    "passing_yards": [232],
+                }
+            ),
+            self.player_path,
+        )
 
     def tearDown(self) -> None:
         self.temp_directory.cleanup()
@@ -84,6 +99,20 @@ class SqlViewsTest(unittest.TestCase):
         ).fetchall()
 
         self.assertEqual(seasons, [(2023,), (2024,)])
+
+    def test_player_weekly_joins_to_plays_on_game_and_team(self) -> None:
+        connection = create_analytics_connection(
+            {"plays": self.paths, "player_weekly": [self.player_path]}
+        )
+
+        rows = connection.execute(
+            "SELECT w.player_id, COUNT(p.play_id) AS offensive_plays "
+            "FROM nfl_player_weekly w "
+            "JOIN nfl_plays p ON p.game_id = w.game_id AND p.posteam = w.team "
+            "GROUP BY ALL"
+        ).fetchall()
+
+        self.assertEqual(rows, [("00-0034857", 1)])
 
     def test_no_processed_files_raises_clear_error(self) -> None:
         with TemporaryDirectory() as directory:

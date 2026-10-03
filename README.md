@@ -26,7 +26,7 @@ The long-term direction is to support a data-grounded architecture where:
 
 Future extensions may include:
 
-- adding weekly player and team statistics
+- adding weekly team statistics
 - comparing web search vs. RAG for NFL context
 - adding roster and draft analysis
 - exposing the system through a website and API
@@ -34,7 +34,8 @@ Future extensions may include:
 ## Current Status
 
 The repo is currently a FastAPI application with data ingestion, processed
-play-level data, a browser UI, and an LLM-backed `/ask` endpoint.
+play-level and weekly player data, a browser UI, and an LLM-backed `/ask`
+endpoint.
 
 ## Request Architecture
 
@@ -102,6 +103,26 @@ Cleaning keeps the documented source columns, stores blank strings as nulls,
 stores columns documented as `integer` in the schema YAML as integers, adds
 derived fields, and rejects null or duplicate `game_id`/`play_id` keys.
 
+## Weekly Player Data
+
+Download and clean weekly player statistics the same way:
+
+```bash
+python3 -m app.data_foundation.ingestion player_weekly 2020 2021 2022 2023 2024 2025
+python3 -m app.data_foundation.cleaning player_weekly 2020 2021 2022 2023 2024 2025
+```
+
+This writes one row per player per game to:
+
+```text
+data/processed/nfl_player_weekly_2024.parquet
+```
+
+and exposes it as the approved `nfl_player_weekly` view. Source rows without a
+`player_id` (team-level penalties and safeties, about 22 per season) are
+dropped, and cleaning prints how many. The app needs processed files for every
+registered dataset before `/ask` can query either view.
+
 ## Run The App
 
 Start the API:
@@ -127,8 +148,8 @@ The intended `/ask` workflow is data-extractor first:
 
 The answer flow should not invent plays, injuries, quotes, roster context,
 transaction news, or reporting that was not supplied. Current local data is
-structured play-level NFL data; future retrieval or web search can add outside
-context later.
+structured play-level and weekly player NFL data; future retrieval or web
+search can add outside context later.
 
 ### OpenAI
 
@@ -217,6 +238,7 @@ curl -X POST http://localhost:8000/ask \
 - [Request architecture](docs/architecture.md)
 - [NFL plays data guide](docs/data_schema.md)
 - [NFL plays schema (columns, types, descriptions)](app/data_foundation/schemas/nfl_plays.yaml)
+- [NFL weekly player schema (columns, types, usage notes)](app/data_foundation/schemas/nfl_player_weekly.yaml)
 - [Local LLM and Ollama setup](docs/local_llm_setup.md)
 - [LLM debugging](docs/debugging.md)
 - [Project roadmap](docs/roadmap.md)

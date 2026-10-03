@@ -1,7 +1,6 @@
 view: nfl_plays
 description: Cleaned league-wide NFL play-level analytics view built from nflverse play-by-play data.
 grain: One row per play from an NFL game.
-approved_for_llm_sql: true
 columns:
   season:
     type: integer

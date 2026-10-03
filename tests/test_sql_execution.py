@@ -40,6 +40,10 @@ class SqlExecutionTest(unittest.TestCase):
                 path,
             )
             self.paths.append(path)
+        pq.write_table(
+            pa.table({"season": [2024], "player_id": ["00-0034857"]}),
+            Path(self.temp_directory.name) / "nfl_player_weekly_2024.parquet",
+        )
         self.paths_patch = patch(
             "app.data_foundation.datasets.PROCESSED_DATA_DIR",
             Path(self.temp_directory.name),

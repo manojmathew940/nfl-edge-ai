@@ -18,6 +18,13 @@ from app.data_foundation.plays import add_derived_fields
 PLAYS = get_dataset("plays")
 
 
+def source_frame(rows: int, **columns: list) -> pd.DataFrame:
+    """A raw-shaped frame with every source column, null unless given."""
+    frame = {column: [None] * rows for column in PLAYS.source_columns}
+    frame.update(columns)
+    return pd.DataFrame(frame)
+
+
 class CleaningTest(unittest.TestCase):
     def test_paths_use_nfl_wide_names(self) -> None:
         self.assertEqual(
@@ -135,12 +142,11 @@ class CleaningTest(unittest.TestCase):
             self.assertEqual(output_path.read_bytes(), b"existing-data")
 
     def test_normalizes_blank_strings_and_documented_integer_columns(self) -> None:
-        plays = pd.DataFrame(
-            {
-                "play_id": [1.0, 2.0, None],
-                "surface": ["grass", "", None],
-                "epa": [0.5, 1.0, None],
-            }
+        plays = source_frame(
+            3,
+            play_id=[1.0, 2.0, None],
+            surface=["grass", "", None],
+            epa=[0.5, 1.0, None],
         )
 
         result = _normalize_source_values(PLAYS, plays)
@@ -154,7 +160,7 @@ class CleaningTest(unittest.TestCase):
 
     def test_fractional_value_in_integer_column_raises(self) -> None:
         with self.assertRaisesRegex(ValueError, "plays.qtr is documented as integer"):
-            _normalize_source_values(PLAYS, pd.DataFrame({"qtr": [1.0, 2.5]}))
+            _normalize_source_values(PLAYS, source_frame(2, qtr=[1.0, 2.5]))
 
     def test_rejects_duplicate_keys(self) -> None:
         rows = []

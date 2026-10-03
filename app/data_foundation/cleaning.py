@@ -52,8 +52,6 @@ def _normalize_source_values(spec: DatasetSpec, processed: pd.DataFrame) -> pd.D
             processed[column] = processed[column].mask(processed[column] == "")
 
     for column in spec.integer_columns:
-        if column not in processed.columns:
-            continue
         try:
             processed[column] = processed[column].astype("Int64")
         except (TypeError, ValueError) as error:

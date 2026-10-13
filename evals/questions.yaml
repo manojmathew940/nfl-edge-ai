@@ -1,0 +1,81 @@
+# Baseline questions for the /ask flow. Run with scripts/run_question_eval.py.
+#
+# views: approved views the SQL must reference; [] means no data is needed.
+# answer_includes: facts the answer must mention, compared case-insensitively
+#   with thousands separators removed. A nested list means any one of them.
+#   Values were computed from the processed data with hand-written SQL.
+
+- id: buf_rushers_2025
+  question: Rank all Buffalo Bills rushers in the 2025 regular season by the most rushing yards to least yards.
+  views: [nfl_player_weekly]
+  answer_includes: [James Cook, "1621", Josh Allen, "579"]
+
+- id: buf_receivers_2025
+  question: Rank all Buffalo Bills receivers in the 2025 regular season by the most receiving yards to least yards.
+  views: [nfl_player_weekly]
+  answer_includes: [Khalil Shakir, "719", Dalton Kincaid, "571"]
+
+- id: allen_passing_2024
+  question: What was Josh Allen's total passing yards in the 2024 regular season? In the 2024 post season?
+  views: [nfl_player_weekly]
+  answer_includes: ["3731", "636"]
+
+- id: sack_leader_2025
+  question: Who led the NFL in sacks in the 2025 regular season?
+  views: [nfl_player_weekly]
+  answer_includes: [Myles Garrett, "23"]
+
+- id: sack_leaders_2024
+  question: Who were the top three sack leaders in the 2024 regular season?
+  views: [nfl_player_weekly]
+  answer_includes: [Trey Hendrickson, "17.5", Myles Garrett, Nik Bonitto]
+
+- id: receiving_leader_2024
+  question: Which player had the most receiving yards in the 2024 regular season?
+  views: [nfl_player_weekly]
+  answer_includes: [Ja'Marr Chase, "1708"]
+
+- id: qb_passing_epa_2025
+  question: Among quarterbacks with at least 300 pass attempts, who had the highest total passing EPA in the 2025 regular season?
+  views: [nfl_player_weekly]
+  answer_includes: [Drake Maye]
+
+- id: field_goals_2025
+  question: Which kicker made the most field goals in the 2025 regular season, and on how many attempts?
+  views: [nfl_player_weekly]
+  answer_includes: [Fairbairn, "44", "48"]
+
+- id: kc_third_and_long_q4_2024
+  question: What was Kansas City's EPA per play on third-and-7 or longer in the fourth quarter of the 2024 regular season?
+  views: [nfl_plays]
+  answer_includes: ["0.28"]
+
+- id: third_down_rate_2025
+  question: Which team had the best third-down conversion rate in the 2025 regular season?
+  views: [nfl_plays]
+  answer_includes: [[SF, San Francisco]]
+
+- id: det_explosive_plays_2024
+  question: How many explosive plays did the Detroit Lions offense have in the 2024 regular season?
+  views: [nfl_plays]
+  answer_includes: ["130"]
+
+- id: buf_turnovers_2025
+  question: How many turnovers did the Buffalo Bills offense commit in the 2025 regular season?
+  views: [nfl_plays]
+  answer_includes: ["18"]
+
+- id: te_red_zone_targets_2024
+  question: Which tight end had the most red zone targets in the 2024 regular season?
+  views: [nfl_plays, nfl_player_weekly]
+  answer_includes: [Travis Kelce, "26"]
+
+- id: allen_injury_status
+  question: Is Josh Allen injured right now?
+  views: []
+  answer_includes: []
+
+- id: coach_quote
+  question: What did Sean McDermott say in his last press conference?
+  views: []
+  answer_includes: []

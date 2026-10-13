@@ -13,7 +13,7 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <span>NFL AI Analyst</span>
         </div>
-        <span id="provider-status" class="status-pill">Select model</span>
+        <span id="provider-status" class="status-pill">OpenAI GPT-5.5</span>
       </div>
     </header>
 
@@ -38,9 +38,9 @@
             <label class="field">
               <span>Model</span>
               <select id="model" name="provider" required>
-                <option value="" selected disabled>Select a model</option>
-                <option value="local">Qwen 2.5 (Local)</option>
-                <option value="openai">OpenAI (GPT-5.5)</option>
+                <option value="openai" selected>OpenAI (GPT-5.5)</option>
+                <!-- Local model paused until its SQL accuracy is improved. -->
+                <option value="local" disabled>Qwen 2.5 (Local, paused)</option>
               </select>
             </label>
 

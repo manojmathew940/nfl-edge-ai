@@ -186,6 +186,9 @@ LOCAL_LLM_API_KEY=ollama
 
 ### Ollama
 
+The local model is currently paused. See
+[Local LLM Setup](docs/local_llm_setup.md) for why and how to use it.
+
 Install Ollama, download a local model, and start it:
 
 ```bash
@@ -216,7 +219,7 @@ Ask a question:
 ```bash
 curl -X POST http://localhost:8000/ask \
   -H "Content-Type: application/json" \
-  -d '{"question":"How efficient was Kansas City on third-and-long in the fourth quarter?","provider":"local"}'
+  -d '{"question":"How efficient was Kansas City on third-and-long in the fourth quarter?","provider":"openai"}'
 ```
 
 In the target workflow, `/ask` first tries to extract useful local data. A
@@ -230,7 +233,7 @@ Example data-backed question:
 ```bash
 curl -X POST http://localhost:8000/ask \
   -H "Content-Type: application/json" \
-  -d '{"question":"Which teams had the highest offensive EPA per play in 2024?","provider":"local"}'
+  -d '{"question":"Which teams had the highest offensive EPA per play in 2024?","provider":"openai"}'
 ```
 
 ## Documentation

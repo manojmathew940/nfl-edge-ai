@@ -1,5 +1,11 @@
 # Local LLM Setup
 
+The local model is paused: the UI disables it and `/ask` defaults to OpenAI.
+On `evals/questions.yaml`, `qwen2.5:7b-instruct` passed 5 of 15 questions versus
+15 of 15 for OpenAI, mostly because of wrong views, columns, and aggregations
+in its SQL. The provider code and settings remain so it can be re-enabled and
+tuned later; `/ask` still accepts `"provider": "local"`.
+
 ## Ollama
 
 Install Ollama, download a model, and start it:

@@ -1,6 +1,12 @@
 view: nfl_plays
 description: Cleaned league-wide NFL play-level analytics view built from nflverse play-by-play data.
 grain: One row per play from an NFL game.
+usage_notes:
+  - Rows include penalty no-plays (play_type no_play), kneels, spikes, special teams plays, and two-point attempts. Filter them out unless the question asks for them.
+  - For EPA per play, success rate, and other offensive efficiency metrics, use only play_type IN ('pass', 'run').
+  - Two-point attempts (two_point_attempt = 1) have no down and do not count toward passing, rushing, or receiving totals, targets, or attempts. Exclude them when counting plays.
+  - A target is a pass play with receiver_player_id set and two_point_attempt = 0.
+  - Exclude rows with null posteam when grouping by team.
 columns:
   season:
     type: integer
@@ -97,7 +103,7 @@ columns:
     description: Source play description.
   play_type:
     type: string
-    description: Normalized play type.
+    description: Normalized play type, one of pass, run, no_play, qb_kneel, qb_spike, kickoff, punt, field_goal, or extra_point. Sacks and scrambles are pass.
   play_type_nfl:
     type: string
     description: NFL source play type.
@@ -423,7 +429,7 @@ columns:
   third_down_attempt:
     type: boolean
     derived: true
-    description: True when the play was a third-down attempt.
+    description: True for third-down pass or run plays, excluding penalty no-plays, kneels, spikes, and kicks. Use it as the denominator for third-down conversion rate.
   red_zone_play:
     type: boolean
     derived: true

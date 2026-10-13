@@ -181,7 +181,8 @@ impact. Rates such as EPA per play, success rate, CP, and CPOE generally use
 These fields are added by this project's cleaning pipeline:
 
 - `turnover`: `1` when the play contains an interception or lost fumble.
-- `third_down_attempt`: `1` when the play started on third down.
+- `third_down_attempt`: `1` for a third-down pass or run play; penalty no-plays,
+  kneels, spikes, and kicks are excluded.
 - `red_zone_play`: `1` when the possession team started at or inside the opponent's 20-yard line.
 - `explosive_play`: `1` for a pass gaining at least 20 yards or a rush gaining at least 10 yards.
 

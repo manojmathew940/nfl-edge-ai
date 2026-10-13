@@ -47,6 +47,7 @@ class CleaningTest(unittest.TestCase):
                     "yardline_100": 19,
                     "interception": 0,
                     "fumble_lost": 0,
+                    "play_type": "pass",
                     "pass_attempt": 1,
                     "rush_attempt": 0,
                     "yards_gained": 21,
@@ -58,6 +59,19 @@ class CleaningTest(unittest.TestCase):
                     "yardline_100": 60,
                     "interception": 1,
                     "fumble_lost": 0,
+                    "play_type": "pass",
+                    "pass_attempt": 1,
+                    "rush_attempt": 0,
+                    "yards_gained": 0,
+                },
+                {
+                    "game_id": "2024_01_SF_NYJ",
+                    "play_id": 2,
+                    "down": 3,
+                    "yardline_100": 60,
+                    "interception": 0,
+                    "fumble_lost": 0,
+                    "play_type": "no_play",
                     "pass_attempt": 1,
                     "rush_attempt": 0,
                     "yards_gained": 0,
@@ -70,11 +84,12 @@ class CleaningTest(unittest.TestCase):
         self.assertEqual(result["game_id"].tolist(), [
             "2024_01_ARI_BUF",
             "2024_01_SF_NYJ",
+            "2024_01_SF_NYJ",
         ])
-        self.assertEqual(result["third_down_attempt"].tolist(), [True, False])
-        self.assertEqual(result["red_zone_play"].tolist(), [True, False])
-        self.assertEqual(result["explosive_play"].tolist(), [True, False])
-        self.assertEqual(result["turnover"].tolist(), [False, True])
+        self.assertEqual(result["third_down_attempt"].tolist(), [True, False, False])
+        self.assertEqual(result["red_zone_play"].tolist(), [True, False, False])
+        self.assertEqual(result["explosive_play"].tolist(), [True, False, False])
+        self.assertEqual(result["turnover"].tolist(), [False, True, False])
         self.assertNotIn("bills_on_offense", result.columns)
         self.assertNotIn("opponent", result.columns)
 
@@ -98,6 +113,7 @@ class CleaningTest(unittest.TestCase):
                 "yardline_100": 15,
                 "interception": 0,
                 "fumble_lost": 0,
+                "play_type": "pass",
                 "pass_attempt": 1,
                 "rush_attempt": 0,
                 "yards_gained": 20,

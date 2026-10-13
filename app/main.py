@@ -27,7 +27,7 @@ from app.llm.data_extraction import (
 
 class AskRequest(BaseModel):
     question: str = Field(min_length=1)
-    provider: str = Field(default="local", pattern="^(openai|local)$")
+    provider: str = Field(default="openai", pattern="^(openai|local)$")
 
 
 class AskResponse(BaseModel):
